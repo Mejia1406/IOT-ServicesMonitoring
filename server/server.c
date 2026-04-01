@@ -12,7 +12,6 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
-/* ─── Constantes ──────────────────────────────────────────────── */
 #define MAX_SENSORS      256
 #define MAX_OPERATORS     64
 #define MAX_ALERTS       512
@@ -20,18 +19,11 @@
 #define BUFFER_SIZE     4096
 #define MAX_FIELD_LEN    128
 
-/* ─── Umbrales de alerta ──────────────────────────────────────── */
-/* temperature: >80 °C  o  <-10 °C                               */
-/* vibration  : >7.5 Hz                                           */
-/* energy     : >800 W                                            */
-/* humidity   : >90 %                                             */
 #define THRESH_TEMP_HIGH   80.0f
 #define THRESH_TEMP_LOW   -10.0f
 #define THRESH_VIB_HIGH    7.5f
 #define THRESH_ENERGY_HIGH 800.0f
 #define THRESH_HUMIDITY_HIGH 90.0f
-
-/* ─── Estructuras ─────────────────────────────────────────────── */
 
 typedef struct {
     char id[MAX_FIELD_LEN];
@@ -41,7 +33,7 @@ typedef struct {
     char last_unit[32];
     char last_ts[32];
     int  active;
-    int  fd;           /* socket del sensor (para referencia) */
+    int  fd;
 } Sensor;
 
 typedef struct {
@@ -73,7 +65,6 @@ typedef struct {
     int  port;
 } ClientCtx;
 
-/* ─── Estado global ───────────────────────────────────────────── */
 static Sensor   g_sensors[MAX_SENSORS];
 static int      g_nsensors = 0;
 static pthread_mutex_t g_sensors_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -95,7 +86,6 @@ static pthread_mutex_t g_log_mtx = PTHREAD_MUTEX_INITIALIZER;
 
 static volatile int g_running = 1;
 
-/* ─── Logging ─────────────────────────────────────────────────── */
 static void log_entry(const char *ip, int port,
                       const char *rx, const char *tx)
 {
@@ -124,18 +114,11 @@ static void log_entry(const char *ip, int port,
     pthread_mutex_unlock(&g_log_mtx);
 }
 
-/* ─── Envío seguro ────────────────────────────────────────────── */
 static int send_msg(int fd, const char *msg)
 {
     return (int)send(fd, msg, strlen(msg), MSG_NOSIGNAL);
 }
 
-/* ─── Split de campos separados por '|' ──────────────────────── */
-/*
- * Divide 'line' por '|' y guarda punteros en fields[].
- * Modifica 'line' in-place (reemplaza '|' con '\0').
- * Devuelve el número de campos encontrados.
- */
 static int split_fields(char *line, char *fields[], int max_fields)
 {
     int n = 0;
@@ -148,7 +131,6 @@ static int split_fields(char *line, char *fields[], int max_fields)
     return n;
 }
 
-/* ─── Broadcast a todos los operadores conectados ────────────── */
 static void broadcast_operators(const char *msg)
 {
     pthread_mutex_lock(&g_operators_mtx);
@@ -159,7 +141,6 @@ static void broadcast_operators(const char *msg)
     pthread_mutex_unlock(&g_operators_mtx);
 }
 
-/* ─── Detección de anomalías ──────────────────────────────────── */
 static void check_anomaly(const char *sensor_id, const char *stype,
                           float value, const char *unit,
                           const char *ip, int port)
@@ -201,13 +182,9 @@ static void check_anomaly(const char *sensor_id, const char *stype,
             anomaly = 1;
         }
     } else if (strcmp(stype, "operational") == 0) {
-        /* Para sensores operacionales el valor es un string (FAIL, CRITICAL) */
-        /* Se detecta anomalía si unit es "state" y value > 0 (codificado) */
-        /* Los clientes mandan value=0 para FAIL/CRITICAL — se maneja abajo */
     }
 
     if (anomaly) {
-        /* Guardar alerta */
         pthread_mutex_lock(&g_alerts_mtx);
         if (g_nalerts < MAX_ALERTS) {
             Alert *a = &g_alerts[g_nalerts++];
@@ -219,7 +196,6 @@ static void check_anomaly(const char *sensor_id, const char *stype,
         }
         pthread_mutex_unlock(&g_alerts_mtx);
 
-        /* Notificar operadores */
         char notif[600];
         snprintf(notif, sizeof(notif), "%s\n", alert_msg);
         broadcast_operators(notif);
@@ -228,22 +204,12 @@ static void check_anomaly(const char *sensor_id, const char *stype,
     }
 }
 
-/* ─── Autenticación HTTP hacia el auth-service (Flask) ────────── */
-/*
- * El auth-service corre en Python/Flask y expone:
- *   POST /auth  body: {"username":"x","password":"y"}
- *
- * Esta función construye manualmente la petición HTTP/1.1
- * usando sockets raw (sin libcurl ni libssl) para no tener
- * dependencias externas en el servidor C.
- */
 static int auth_http(const char *username, const char *password,
                      char *role_out, int role_len)
 {
     const char *host = getenv("AUTH_HOST") ? getenv("AUTH_HOST") : "localhost";
     const char *port = getenv("AUTH_PORT") ? getenv("AUTH_PORT") : "5000";
 
-    /* Resolver hostname */
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family   = AF_UNSPEC;
@@ -251,7 +217,6 @@ static int auth_http(const char *username, const char *password,
 
     if (getaddrinfo(host, port, &hints, &res) != 0) {
         fprintf(stderr, "[AUTH] DNS error for %s:%s\n", host, port);
-        /* Modo dev: acepta admin/admin sin auth service */
         if (strcmp(username, "admin")  == 0 && strcmp(password, "admin")  == 0)
             { strncpy(role_out, "admin",    role_len); return 1; }
         if (strcmp(username, "sara")   == 0 && strcmp(password, "1234")   == 0)
@@ -262,7 +227,6 @@ static int auth_http(const char *username, const char *password,
     int sock = socket(res->ai_family, SOCK_STREAM, 0);
     if (sock < 0) { freeaddrinfo(res); return 0; }
 
-    /* Timeout de 3 segundos para no bloquear el servidor */
     struct timeval tv = {3, 0};
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
@@ -270,7 +234,6 @@ static int auth_http(const char *username, const char *password,
     if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
         freeaddrinfo(res); close(sock);
         fprintf(stderr, "[AUTH] Could not connect to %s:%s\n", host, port);
-        /* Fallback dev */
         if (strcmp(username, "admin") == 0 && strcmp(password, "admin") == 0)
             { strncpy(role_out, "admin",    role_len); return 1; }
         if (strcmp(username, "sara")  == 0 && strcmp(password, "1234")  == 0)
@@ -279,13 +242,11 @@ static int auth_http(const char *username, const char *password,
     }
     freeaddrinfo(res);
 
-    /* Construir JSON body */
     char body[256];
     snprintf(body, sizeof(body),
              "{\"username\":\"%s\",\"password\":\"%s\"}",
              username, password);
 
-    /* Construir petición HTTP/1.1 */
     char req[1024];
     snprintf(req, sizeof(req),
              "POST /auth HTTP/1.1\r\n"
@@ -299,7 +260,6 @@ static int auth_http(const char *username, const char *password,
 
     send(sock, req, strlen(req), 0);
 
-    /* Leer respuesta completa */
     char resp[2048] = {0};
     ssize_t total = 0;
     ssize_t n;
@@ -307,10 +267,8 @@ static int auth_http(const char *username, const char *password,
         total += n;
     close(sock);
 
-    /* Buscar el status HTTP */
     if (!strstr(resp, "200 OK")) return 0;
 
-    /* Extraer role del JSON: busca "role":"xxx" */
     char *p = strstr(resp, "\"role\"");
     if (!p) return 0;
     p = strchr(p, ':');
@@ -325,35 +283,9 @@ static int auth_http(const char *username, const char *password,
     return (i > 0) ? 1 : 0;
 }
 
-/* ─── Procesamiento de mensajes del protocolo pipe ────────────── */
-/*
- * Cada línea recibida se analiza aquí.
- * El protocolo usa '|' como separador de campos.
- *
- * Mensajes entrantes (desde sensores):
- *   REGISTER|<id>|<type>|<location>
- *   DATA|<id>|<type>|<value>|<unit>|<timestamp>
- *   HEARTBEAT|<id>|<timestamp>
- *   QUIT|<id>
- *
- * Mensajes de operadores (futuros clientes):
- *   AUTH_OPERATOR|<op_id>|<username>|<password>
- *   STATUS
- *   LIST_SENSORS
- *   LIST_ALERTS
- *
- * Respuestas del servidor:
- *   OK REGISTERED\n
- *   OK DATA\n
- *   OK HEARTBEAT\n
- *   OK BYE\n
- *   ERROR|<motivo>\n
- *   ALERT|<tipo>|<sensor_id>|<value>|<unit>|<detalle>\n
- */
 static void process_message(const char *ip, int port, int fd,
                              char *line, char *resp_buf, int resp_len)
 {
-    /* Copiar para no destruir el original antes del log */
     char work[BUFFER_SIZE];
     strncpy(work, line, sizeof(work) - 1);
     work[sizeof(work) - 1] = '\0';
@@ -369,7 +301,6 @@ static void process_message(const char *ip, int port, int fd,
 
     const char *cmd = fields[0];
 
-    /* ── REGISTER ── */
     if (strcmp(cmd, "REGISTER") == 0) {
         if (nf < 4) {
             snprintf(resp_buf, resp_len, "ERROR|INVALID_REGISTER\n");
@@ -404,9 +335,7 @@ static void process_message(const char *ip, int port, int fd,
         return;
     }
 
-    /* ── DATA ── */
     if (strcmp(cmd, "DATA") == 0) {
-        /*  DATA|<id>|<type>|<value>|<unit>|<timestamp>  */
         if (nf < 6) {
             snprintf(resp_buf, resp_len, "ERROR|INVALID_DATA\n");
             return;
@@ -420,17 +349,14 @@ static void process_message(const char *ip, int port, int fd,
         float value = 0.0f;
         int   is_numeric = 1;
 
-        /* Para sensores de estado (operational) el valor puede ser "OK","FAIL"... */
         if (sscanf(sval, "%f", &value) != 1) {
             is_numeric = 0;
-            /* Codificar estado: FAIL/CRITICAL = -1, WARNING = 0.5, OK = 0 */
             if (strcmp(sval, "FAIL") == 0 || strcmp(sval, "CRITICAL") == 0)
                 value = -1.0f;
             else if (strcmp(sval, "WARNING") == 0)
                 value = 0.5f;
         }
 
-        /* Actualizar sensor */
         pthread_mutex_lock(&g_sensors_mtx);
         for (int i = 0; i < g_nsensors; i++) {
             if (strcmp(g_sensors[i].id, sid) == 0) {
@@ -443,7 +369,6 @@ static void process_message(const char *ip, int port, int fd,
         }
         pthread_mutex_unlock(&g_sensors_mtx);
 
-        /* Guardar lectura */
         pthread_mutex_lock(&g_readings_mtx);
         if (g_nreadings < MAX_READINGS) {
             Reading *r = &g_readings[g_nreadings++];
@@ -454,17 +379,14 @@ static void process_message(const char *ip, int port, int fd,
         }
         pthread_mutex_unlock(&g_readings_mtx);
 
-        /* Notificar operadores con la medición */
         char notif[256];
         snprintf(notif, sizeof(notif),
                  "DATA|%s|%s|%s|%s|%s\n", sid, stype, sval, sunit, sts);
         broadcast_operators(notif);
 
-        /* Verificar anomalía (solo para sensores numéricos) */
         if (is_numeric)
             check_anomaly(sid, stype, value, sunit, ip, port);
 
-        /* Para operational con FAIL/CRITICAL, generar alerta directa */
         if (!is_numeric &&
             (strcmp(sval, "FAIL") == 0 || strcmp(sval, "CRITICAL") == 0)) {
             char alert_msg[512];
@@ -489,11 +411,8 @@ static void process_message(const char *ip, int port, int fd,
         return;
     }
 
-    /* ── HEARTBEAT ── */
     if (strcmp(cmd, "HEARTBEAT") == 0) {
-        /* HEARTBEAT|<sensor_id>|<timestamp> */
         if (nf >= 2) {
-            /* Marcar sensor como activo */
             pthread_mutex_lock(&g_sensors_mtx);
             for (int i = 0; i < g_nsensors; i++) {
                 if (strcmp(g_sensors[i].id, fields[1]) == 0) {
@@ -507,7 +426,6 @@ static void process_message(const char *ip, int port, int fd,
         return;
     }
 
-    /* ── QUIT ── */
     if (strcmp(cmd, "QUIT") == 0) {
         if (nf >= 2) {
             pthread_mutex_lock(&g_sensors_mtx);
@@ -524,8 +442,6 @@ static void process_message(const char *ip, int port, int fd,
         return;
     }
 
-    /* ── AUTH_OPERATOR (para el cliente operador) ── */
-    /* AUTH_OPERATOR|<op_id>|<username>|<password>   */
     if (strcmp(cmd, "AUTH_OPERATOR") == 0) {
         if (nf < 4) {
             snprintf(resp_buf, resp_len, "ERROR|INVALID_AUTH\n");
@@ -565,7 +481,6 @@ static void process_message(const char *ip, int port, int fd,
         return;
     }
 
-    /* ── STATUS ── */
     if (strcmp(cmd, "STATUS") == 0) {
         int as = 0, ao = 0;
         pthread_mutex_lock(&g_sensors_mtx);
@@ -584,7 +499,6 @@ static void process_message(const char *ip, int port, int fd,
         return;
     }
 
-    /* ── LIST_SENSORS ── */
     if (strcmp(cmd, "LIST_SENSORS") == 0) {
         char buf[BUFFER_SIZE];
         int pos = snprintf(buf, sizeof(buf), "SENSORS");
@@ -605,7 +519,6 @@ static void process_message(const char *ip, int port, int fd,
         return;
     }
 
-    /* ── LIST_ALERTS ── */
     if (strcmp(cmd, "LIST_ALERTS") == 0) {
         char buf[BUFFER_SIZE];
         int pos = snprintf(buf, sizeof(buf), "ALERTS");
@@ -624,11 +537,9 @@ static void process_message(const char *ip, int port, int fd,
         return;
     }
 
-    /* ── Comando desconocido ── */
     snprintf(resp_buf, resp_len, "ERROR|UNKNOWN_COMMAND\n");
 }
 
-/* ─── Servidor HTTP mínimo ────────────────────────────────────── */
 static void handle_http(ClientCtx *ctx, const char *request)
 {
     char method[8], path[256];
@@ -739,13 +650,12 @@ static void handle_http(ClientCtx *ctx, const char *request)
     log_entry(ctx->ip, ctx->port, request, "HTTP 200");
 }
 
-/* ─── Hilo por cliente ────────────────────────────────────────── */
 static void *client_thread(void *arg)
 {
     ClientCtx *ctx = (ClientCtx *)arg;
     char buffer[BUFFER_SIZE];
     char resp[BUFFER_SIZE];
-    char leftover[BUFFER_SIZE] = {0};  /* datos incompletos entre recv */
+    char leftover[BUFFER_SIZE] = {0};
 
     log_entry(ctx->ip, ctx->port, "CONNECTED", NULL);
 
@@ -755,16 +665,13 @@ static void *client_thread(void *arg)
         if (n <= 0) break;
         buffer[n] = '\0';
 
-        /* Detectar HTTP en el primer mensaje */
         if (strncmp(buffer, "GET ",  4) == 0 ||
             strncmp(buffer, "POST ", 5) == 0 ||
             strncmp(buffer, "HEAD ", 5) == 0) {
             handle_http(ctx, buffer);
-            break;   /* HTTP es sin estado, cerramos tras responder */
+            break;
         }
 
-        /* Protocolo IoT: puede llegar más de una línea en un recv */
-        /* Concatenar con lo que quedó del recv anterior            */
         char combined[BUFFER_SIZE * 2];
         snprintf(combined, sizeof(combined), "%s%s", leftover, buffer);
         leftover[0] = '\0';
@@ -775,7 +682,6 @@ static void *client_thread(void *arg)
         while ((newline = strchr(line_start, '\n')) != NULL) {
             *newline = '\0';
 
-            /* Eliminar \r si existe */
             size_t len = strlen(line_start);
             if (len > 0 && line_start[len - 1] == '\r')
                 line_start[len - 1] = '\0';
@@ -785,24 +691,20 @@ static void *client_thread(void *arg)
                 continue;
             }
 
-            /* Procesar mensaje */
             memset(resp, 0, sizeof(resp));
             process_message(ctx->ip, ctx->port, ctx->fd,
                             line_start, resp, sizeof(resp));
 
-            /* Enviar respuesta */
             if (strlen(resp) > 0)
                 send_msg(ctx->fd, resp);
 
             log_entry(ctx->ip, ctx->port, line_start, resp);
 
-            /* Si fue QUIT, cerrar conexión */
             if (strncmp(resp, "OK BYE", 6) == 0) goto cleanup;
 
             line_start = newline + 1;
         }
 
-        /* Guardar lo que quedó incompleto (sin \n) */
         if (strlen(line_start) > 0)
             strncpy(leftover, line_start, sizeof(leftover) - 1);
     }
@@ -814,7 +716,6 @@ cleanup:
     return NULL;
 }
 
-/* ─── Señales ─────────────────────────────────────────────────── */
 static void on_signal(int sig)
 {
     (void)sig;
@@ -822,7 +723,6 @@ static void on_signal(int sig)
     printf("\n[SERVER] Señal recibida, cerrando...\n");
 }
 
-/* ─── Main ────────────────────────────────────────────────────── */
 int main(int argc, char *argv[])
 {
     if (argc != 3) {
@@ -833,24 +733,21 @@ int main(int argc, char *argv[])
     const char *port_str = argv[1];
     const char *log_path = argv[2];
 
-    /* Abrir archivo de logs */
     g_logfp = fopen(log_path, "a");
     if (!g_logfp) {
         perror("fopen");
         return EXIT_FAILURE;
     }
 
-    /* Señales */
     signal(SIGINT,  on_signal);
     signal(SIGTERM, on_signal);
-    signal(SIGPIPE, SIG_IGN);  /* ignorar broken pipe al escribir en socket cerrado */
+    signal(SIGPIPE, SIG_IGN);
 
-    /* Crear socket del servidor usando getaddrinfo (sin IPs hard-coded) */
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family   = AF_INET;       /* IPv4 */
-    hints.ai_socktype = SOCK_STREAM;   /* TCP  */
-    hints.ai_flags    = AI_PASSIVE;    /* Bind a todas las interfaces */
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags    = AI_PASSIVE;
 
     int rc = getaddrinfo(NULL, port_str, &hints, &res);
     if (rc != 0) {
@@ -886,7 +783,6 @@ int main(int argc, char *argv[])
 
     log_entry("SERVER", atoi(port_str), "SERVER_START", port_str);
 
-    /* Loop principal de aceptación */
     while (g_running) {
         struct sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
@@ -899,7 +795,6 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        /* Preparar contexto del cliente */
         ClientCtx *ctx = calloc(1, sizeof(ClientCtx));
         if (!ctx) { close(client_fd); continue; }
 
@@ -908,7 +803,6 @@ int main(int argc, char *argv[])
         inet_ntop(AF_INET, &client_addr.sin_addr,
                   ctx->ip, sizeof(ctx->ip));
 
-        /* Lanzar hilo dedicado (detached — no hace join) */
         pthread_t tid;
         pthread_attr_t attr;
         pthread_attr_init(&attr);
