@@ -3,7 +3,9 @@ import threading
 import logging
 import os
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - SERVER - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - SERVER - %(levelname)s - %(message)s')
+
 
 def client_handler(conn, addr):
     logging.info(f"Nueva conexión desde {addr}")
@@ -13,15 +15,15 @@ def client_handler(conn, addr):
             data = conn.recv(1024)
             if not data:
                 break
-            
+
             buffer += data.decode("utf-8")
-            
+
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
                 line = line.strip()
                 if line:
                     logging.info(f"Recibido de {addr}: {line}")
-                    
+
                     # Respuesta simulada al cliente dependiendo del tipo de mensaje
                     if line.startswith("REGISTER"):
                         conn.sendall(b"OK REGISTERED\n")
@@ -47,12 +49,12 @@ def start_server():
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    
+
     try:
         server.bind((host, port))
         server.listen(10)
         logging.info(f"Servidor de prueba escuchando en {host}:{port}")
-        
+
         while True:
             conn, addr = server.accept()
             thread = threading.Thread(target=client_handler, args=(conn, addr))
@@ -64,6 +66,7 @@ def start_server():
         logging.error(f"Error en el servidor: {e}")
     finally:
         server.close()
+
 
 if __name__ == "__main__":
     start_server()
