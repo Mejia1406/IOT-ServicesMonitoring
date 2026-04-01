@@ -9,3 +9,4 @@ __pycache__/
 *.tar
 .DS_Store
 Thumbs.db
+*.class
