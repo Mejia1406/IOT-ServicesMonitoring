@@ -1,7 +1,7 @@
 import os
 
 
-SERVER_HOST = os.getenv("IOT_SERVER_HOST", "iot-monitoring.example.com")
+SERVER_HOST = os.getenv("IOT_SERVER_HOST", "localhost")
 SERVER_PORT = int(os.getenv("IOT_SERVER_PORT", "9000"))
 
 RECONNECT_DELAY = float(os.getenv("RECONNECT_DELAY", "3"))

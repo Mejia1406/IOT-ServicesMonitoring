@@ -217,27 +217,23 @@ static int auth_http(const char *username, const char *password,
 
     if (getaddrinfo(host, port, &hints, &res) != 0) {
         fprintf(stderr, "[AUTH] DNS error for %s:%s\n", host, port);
-        if (strcmp(username, "admin")  == 0 && strcmp(password, "admin")  == 0)
-            { strncpy(role_out, "admin",    role_len); return 1; }
-        if (strcmp(username, "sara")   == 0 && strcmp(password, "1234")   == 0)
-            { strncpy(role_out, "operator", role_len); return 1; }
         return 0;
     }
 
     int sock = socket(res->ai_family, SOCK_STREAM, 0);
-    if (sock < 0) { freeaddrinfo(res); return 0; }
+    if (sock < 0) {
+        freeaddrinfo(res);
+        return 0;
+    }
 
     struct timeval tv = {3, 0};
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
     if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
-        freeaddrinfo(res); close(sock);
+        freeaddrinfo(res);
+        close(sock);
         fprintf(stderr, "[AUTH] Could not connect to %s:%s\n", host, port);
-        if (strcmp(username, "admin") == 0 && strcmp(password, "admin") == 0)
-            { strncpy(role_out, "admin",    role_len); return 1; }
-        if (strcmp(username, "sara")  == 0 && strcmp(password, "1234")  == 0)
-            { strncpy(role_out, "operator", role_len); return 1; }
         return 0;
     }
     freeaddrinfo(res);
@@ -275,6 +271,7 @@ static int auth_http(const char *username, const char *password,
     if (!p) return 0;
     p++;
     while (*p == ' ' || *p == '"') p++;
+
     int i = 0;
     while (*p && *p != '"' && *p != '}' && *p != '\n' && i < role_len - 1)
         role_out[i++] = *p++;

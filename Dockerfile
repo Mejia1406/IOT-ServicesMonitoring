@@ -1,8 +1,8 @@
 FROM gcc:13-bookworm AS builder
 
 WORKDIR /build
-COPY server.c .
-COPY Makefile .
+COPY server/server.c .
+COPY server/Makefile .
 RUN make
 
 FROM debian:bookworm-slim
