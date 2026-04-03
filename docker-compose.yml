@@ -1,0 +1,54 @@
+version: '3.8'
+
+# ============================================================
+#  IoT Services Monitoring — Docker Compose
+#  Levanta el servidor C y el auth service juntos
+#
+#  Uso:
+#    docker-compose up -d          # levantar en background
+#    docker-compose logs -f        # ver logs en vivo
+#    docker-compose down           # detener y eliminar contenedores
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # Servicio de autenticación (Flask)
+  # ----------------------------------------------------------
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: auth-service.Dockerfile
+    container_name: iot-auth
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+            "import json, urllib.request; req=urllib.request.Request('http://localhost:5000/auth', data=json.dumps({'username':'admin','password':'admin'}).encode(), headers={'Content-Type':'application/json'}); urllib.request.urlopen(req, timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ----------------------------------------------------------
+  # Servidor central IoT (C con Berkeley Sockets)
+  # ----------------------------------------------------------
+  iot-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iot-server
+    ports:
+      - "9000:9000"
+    environment:
+      # El servidor C resuelve el auth-service por nombre de contenedor
+      - AUTH_HOST=auth-service
+      - AUTH_PORT=5000
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    volumes:
+      # Monta el directorio de logs en el host para poder inspeccionarlos
+      - ./server/logs:/app/logs
+    restart: unless-stopped
