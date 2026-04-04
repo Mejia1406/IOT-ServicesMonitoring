@@ -12,6 +12,7 @@ import java.util.concurrent.*;
 
 public class OperatorClient extends JFrame {
 
+    
     static final Color BG        = new Color(13, 17, 23);
     static final Color BG2       = new Color(22, 27, 34);
     static final Color BG3       = new Color(33, 38, 45);
@@ -22,33 +23,40 @@ public class OperatorClient extends JFrame {
     static final Color RED       = new Color(248, 81, 73);
     static final Color GRAY      = new Color(139, 148, 158);
 
+    
     static String serverHost = System.getenv("IOT_SERVER_HOST") != null
             ? System.getenv("IOT_SERVER_HOST") : "localhost";
     static int serverPort = System.getenv("IOT_SERVER_PORT") != null
             ? Integer.parseInt(System.getenv("IOT_SERVER_PORT")) : 9000;
 
+    
     private Socket           socket;
     private PrintWriter      writer;
     private BufferedReader   reader;
     private volatile boolean connected  = false;
     private volatile boolean running    = true;
 
+    
     private final DefaultTableModel sensorModel;
     private final DefaultTableModel alertModel;
     private int msgCount   = 0;
     private int alertCount = 0;
 
+    
     private JLabel  statusLabel;
     private JLabel  connLabel;
+    private JLabel  opIdLabel;
     private JLabel  statSensors;
     private JLabel  statAlerts;
     private JLabel  statMsgs;
     private JTextArea logArea;
     private JTextField cmdField;
 
+    
     public OperatorClient() {
         super("IoT Monitoring — Panel de Operador");
 
+        
         sensorModel = new DefaultTableModel(
                 new String[]{"ID", "Tipo", "Valor", "Unidad", "Ubicación"}, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -72,9 +80,11 @@ public class OperatorClient extends JFrame {
         setLocationRelativeTo(null);
         setVisible(true);
 
+        
         SwingUtilities.invokeLater(this::showLogin);
     }
 
+    
     private void buildUI() {
         getContentPane().setBackground(BG);
         setLayout(new BorderLayout(0, 0));
@@ -97,12 +107,15 @@ public class OperatorClient extends JFrame {
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
         right.setBackground(BG);
 
-        connLabel  = styledLabel("", GRAY, 11);
+        connLabel   = styledLabel("", GRAY, 11);
+        opIdLabel   = styledLabel("", GRAY, 11);
         statusLabel = styledLabel("● DESCONECTADO", RED, 11);
+        right.add(opIdLabel);
         right.add(connLabel);
         right.add(statusLabel);
         header.add(right, BorderLayout.EAST);
 
+        
         JPanel stats = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         stats.setBackground(BG2);
         stats.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
@@ -153,17 +166,20 @@ public class OperatorClient extends JFrame {
         JPanel p = new JPanel(new BorderLayout());
         p.setBackground(BG2);
 
+        
         JLabel hdr = styledLabel(" SENSORES ACTIVOS", BLUE, 11);
         hdr.setOpaque(true);
         hdr.setBackground(BG3);
         hdr.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
         p.add(hdr, BorderLayout.NORTH);
 
+        
         JTable table = buildTable(sensorModel);
         table.setDefaultRenderer(Object.class, new SensorCellRenderer());
         JScrollPane scroll = darkScroll(table);
         p.add(scroll, BorderLayout.CENTER);
 
+        
         JPanel btns = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         btns.setBackground(BG2);
         btns.add(darkButton("↺  Actualizar", GREEN, e -> {
@@ -217,6 +233,7 @@ public class OperatorClient extends JFrame {
         return p;
     }
 
+    
     private void showLogin() {
         JDialog dlg = new JDialog(this, "Iniciar sesión", true);
         dlg.getContentPane().setBackground(BG);
@@ -245,21 +262,20 @@ public class OperatorClient extends JFrame {
         top.add(t2);
         dlg.add(top, BorderLayout.NORTH);
 
-        JPanel form = new JPanel(new GridLayout(5, 2, 6, 8));
+        
+        JPanel form = new JPanel(new GridLayout(4, 2, 6, 8));
         form.setBackground(BG);
         form.setBorder(BorderFactory.createEmptyBorder(8, 24, 8, 24));
 
         JTextField fHost = loginField(serverHost);
         JTextField fPort = loginField(String.valueOf(serverPort));
-        JTextField fOpId = loginField("OP-001");
         JTextField fUser = loginField("admin");
         JPasswordField fPass = new JPasswordField("admin");
         styleLoginField(fPass);
 
-        form.add(loginLabel("Servidor:"));  form.add(fHost);
-        form.add(loginLabel("Puerto:"));    form.add(fPort);
-        form.add(loginLabel("Operador ID:")); form.add(fOpId);
-        form.add(loginLabel("Usuario:"));   form.add(fUser);
+        form.add(loginLabel("Servidor:"));   form.add(fHost);
+        form.add(loginLabel("Puerto:"));     form.add(fPort);
+        form.add(loginLabel("Usuario:"));    form.add(fUser);
         form.add(loginLabel("Contraseña:")); form.add(fPass);
         dlg.add(form, BorderLayout.CENTER);
 
@@ -277,11 +293,11 @@ public class OperatorClient extends JFrame {
         btnConnect.addActionListener(e -> {
             String host  = fHost.getText().trim();
             String port  = fPort.getText().trim();
-            String opid  = fOpId.getText().trim();
             String user  = fUser.getText().trim();
             String pass  = new String(fPass.getPassword()).trim();
+            String opid  = "OP-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-            if (host.isEmpty() || opid.isEmpty() || user.isEmpty() || pass.isEmpty()) {
+            if (host.isEmpty() || user.isEmpty() || pass.isEmpty()) {
                 errLabel.setText("Completa todos los campos");
                 return;
             }
@@ -293,6 +309,7 @@ public class OperatorClient extends JFrame {
             errLabel.setText("Conectando...");
             btnConnect.setEnabled(false);
 
+            
             new Thread(() -> {
                 try {
                     doConnect(host, portNum, opid, user, pass);
@@ -300,6 +317,7 @@ public class OperatorClient extends JFrame {
                         dlg.dispose();
                         statusLabel.setText("● CONECTADO");
                         statusLabel.setForeground(GREEN);
+                        opIdLabel.setText(opid + " (" + user + ")  │  ");
                         connLabel.setText(host + ":" + portNum + "  ");
                         appendLog("Conectado como " + opid + " (" + user + ")", GREEN);
                         sendMessage("LIST_SENSORS");
@@ -324,8 +342,10 @@ public class OperatorClient extends JFrame {
         dlg.setVisible(true);
     }
 
+    
     private void doConnect(String host, int port,
                            String opid, String user, String pass) throws Exception {
+        
         InetAddress addr = InetAddress.getByName(host);
         socket = new Socket();
         socket.connect(new InetSocketAddress(addr, port), 8000);
@@ -336,9 +356,11 @@ public class OperatorClient extends JFrame {
         reader = new BufferedReader(
                 new InputStreamReader(socket.getInputStream()));
 
+        
         String authMsg = "AUTH_OPERATOR|" + opid + "|" + user + "|" + pass;
         writer.println(authMsg);
 
+        
         socket.setSoTimeout(5000);
         String resp = reader.readLine();
         socket.setSoTimeout(0);
@@ -350,10 +372,12 @@ public class OperatorClient extends JFrame {
 
         connected = true;
 
+        
         Thread recvThread = new Thread(this::recvLoop);
         recvThread.setDaemon(true);
         recvThread.start();
 
+        
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
             if (connected) {
@@ -363,6 +387,7 @@ public class OperatorClient extends JFrame {
         }, 5, 5, TimeUnit.SECONDS);
     }
 
+    
     private void recvLoop() {
         try {
             String line;
@@ -384,6 +409,7 @@ public class OperatorClient extends JFrame {
         }
     }
 
+    
     private void handleMessage(String line) {
         msgCount++;
         statMsgs.setText(String.valueOf(msgCount));
@@ -393,6 +419,7 @@ public class OperatorClient extends JFrame {
 
         switch (cmd) {
             case "ALERT": {
+                
                 String type   = parts.length > 1 ? parts[1] : "?";
                 String sensor = parts.length > 2 ? parts[2] : "?";
                 String value  = parts.length > 3 ? parts[3] : "?";
@@ -409,6 +436,7 @@ public class OperatorClient extends JFrame {
             }
 
             case "DATA": {
+                
                 if (parts.length >= 5) {
                     String sid  = parts[1];
                     String type = parts[2];
@@ -421,6 +449,7 @@ public class OperatorClient extends JFrame {
             }
 
             case "STATUS": {
+                
                 for (int i = 1; i < parts.length; i++) {
                     if (parts[i].startsWith("sensors=")) {
                         statSensors.setText(parts[i].split("=")[1]);
@@ -431,6 +460,7 @@ public class OperatorClient extends JFrame {
             }
 
             case "SENSORS": {
+                
                 sensorModel.setRowCount(0);
                 for (int i = 1; i < parts.length; i++) {
                     String[] f = parts[i].split(",");
@@ -444,6 +474,7 @@ public class OperatorClient extends JFrame {
             }
 
             case "ALERTS": {
+                
                 alertModel.setRowCount(0);
                 for (int i = 1; i < parts.length; i++) {
                     String[] f = parts[i].split(",");
@@ -468,6 +499,7 @@ public class OperatorClient extends JFrame {
         }
     }
 
+    
     private void updateSensorRow(String sid, String type,
                                   String val, String unit, String loc) {
         for (int i = 0; i < sensorModel.getRowCount(); i++) {
@@ -481,6 +513,7 @@ public class OperatorClient extends JFrame {
         statSensors.setText(String.valueOf(sensorModel.getRowCount()));
     }
 
+    
     private synchronized void sendMessage(String msg) {
         if (connected && writer != null) {
             writer.println(msg);
@@ -497,10 +530,12 @@ public class OperatorClient extends JFrame {
         }
     }
 
+    
     private void appendLog(String msg, Color color) {
         String ts   = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
         String line = "[" + ts + "] " + msg + "\n";
         logArea.append(line);
+        
         String text = logArea.getText();
         String[] lines = text.split("\n");
         if (lines.length > 200) {
@@ -510,6 +545,7 @@ public class OperatorClient extends JFrame {
         logArea.setCaretPosition(logArea.getDocument().getLength());
     }
 
+    
     private void showAlertsWindow() {
         JDialog dlg = new JDialog(this, "Alertas del Sistema", false);
         dlg.getContentPane().setBackground(BG);
@@ -530,6 +566,7 @@ public class OperatorClient extends JFrame {
         dlg.setVisible(true);
     }
 
+    
     private JLabel styledLabel(String text, Color color, int size) {
         JLabel l = new JLabel(text);
         l.setFont(new Font("Courier New", Font.PLAIN, size));
@@ -600,6 +637,7 @@ public class OperatorClient extends JFrame {
         return sp;
     }
 
+    
     class SensorCellRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value,
@@ -610,6 +648,7 @@ public class OperatorClient extends JFrame {
             setFont(new Font("Courier New", Font.PLAIN, 10));
             setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
 
+            
             if (col == 2) {
                 try {
                     String type  = (String) table.getValueAt(row, 1);
@@ -628,12 +667,15 @@ public class OperatorClient extends JFrame {
         }
     }
 
+    
     public static void main(String[] args) {
+        
         for (int i = 0; i < args.length - 1; i++) {
             if ("-host".equals(args[i])) serverHost = args[i + 1];
             if ("-port".equals(args[i])) serverPort = Integer.parseInt(args[i + 1]);
         }
 
+        
         try {
             UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
         } catch (Exception ignored) {}
