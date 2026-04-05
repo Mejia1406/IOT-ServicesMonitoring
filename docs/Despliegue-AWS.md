@@ -189,7 +189,7 @@ curl -X POST http://localhost:5000/auth \
 1. Ve a **AWS Console → Route 53 → Hosted zones → Create hosted zone**
 
 2. Configura:
-   - **Domain name:** `iot-monitoring.ejemplo.com`
+   - **Domain name:** `iot-monitoring.ddns.net`
    - **Type:** Public hosted zone
    - Click **Create**
 
@@ -200,18 +200,15 @@ curl -X POST http://localhost:5000/auth \
    - **TTL:** 300
    - Click **Create**
 
-4. **Si no tienes dominio propio** (opción para el proyecto educativo):
-   Usa el dominio público de EC2 directamente. AWS asigna uno automáticamente tipo:
-   `ec2-54-123-45-67.compute-1.amazonaws.com`
 
    Puedes usar ese hostname en tus variables de entorno.
 
-5. **Actualizar variables en los clientes:**
+4. **Actualizar variables en los clientes:**
 
    Para el sensor (Python):
 
    ```bash
-   export IOT_SERVER_HOST=iot-monitoring.ejemplo.com
+   export IOT_SERVER_HOST=iot-monitoring.ddns.net
    export IOT_SERVER_PORT=9000
    python3 main.py
    ```
@@ -219,7 +216,7 @@ curl -X POST http://localhost:5000/auth \
    Para el operador (Java):
 
    ```bash
-   export IOT_SERVER_HOST=iot-monitoring.ejemplo.com
+   export IOT_SERVER_HOST=iot-monitoring.ddns.net
    export IOT_SERVER_PORT=9000
    java OperatorClient
    ```
@@ -232,20 +229,20 @@ curl -X POST http://localhost:5000/auth \
 
 ```bash
 # 1. Verificar resolución DNS
-nslookup iot-monitoring.ejemplo.com
+nslookup iot-monitoring.ddns.net
 # Debe devolver: 54.123.45.67
 
 # 2. Verificar interfaz web
-curl http://iot-monitoring.ejemplo.com:9000/
+curl http://iot-monitoring.ddns.net:9000/
 # Debe devolver HTML del dashboard
 
 # 3. Verificar API
-curl http://iot-monitoring.ejemplo.com:9000/api/status
+curl http://iot-monitoring.ddns.net:9000/api/status
 
 # 4. Probar conexión socket directamente
 python3 -c "
 import socket
-s = socket.create_connection(('iot-monitoring.ejemplo.com', 9000))
+s = socket.create_connection(('iot-monitoring.ddns.net', 9000))
 s.send(b'STATUS\n')
 print(s.recv(1024).decode())
 s.close()
@@ -263,12 +260,12 @@ s.close()
 # Sensores Python
 cd client-sensor
 pip install -r requirements.txt  # (está vacío, no necesita nada extra)
-IOT_SERVER_HOST=iot-monitoring.ejemplo.com IOT_SERVER_PORT=9000 python3 main.py
+IOT_SERVER_HOST=iot-monitoring.ddns.net IOT_SERVER_PORT=9000 python3 main.py
 
 # Operador Java (en otra terminal)
 cd client-operator
 javac OperatorClient.java
-IOT_SERVER_HOST=iot-monitoring.ejemplo.com IOT_SERVER_PORT=9000 java OperatorClient
+IOT_SERVER_HOST=iot-monitoring.ddns.net IOT_SERVER_PORT=9000 java OperatorClient
 ```
 
 ---
