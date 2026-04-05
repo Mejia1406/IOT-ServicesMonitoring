@@ -56,28 +56,44 @@ QUIT|sensor-01
 ### Ejecución local
 
 1. Auth service
+```bash
+
    cd auth-service
    python3 auth.py
 
-2. Servidor
+```
+
+3. Servidor
+```bash
+
    cd server
    make
    ./server 9000 server.log
 
-3. Sensores
+```
+5. Sensores
+```bash
+
    cd client-sensor
    export IOT_SERVER_HOST=localhost
    export IOT_SERVER_PORT=9000
    python3 main.py
 
-4. Operador
+```
+6. Operador
+```bash
+
    cd client-operator
    javac OperatorClient.java
    java OperatorClient
 
-5. Global
+```
+7. Global
    Si quieres hacerlo desde PowerShell sin entrar manualmente a WSL, usa:
+```bash
 
 wsl bash -ic "source ~/.bashrc; iot-up"
 wsl bash -ic "source ~/.bashrc; iot-check"
 wsl bash -ic "source ~/.bashrc; iot-down"
+
+```
