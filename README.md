@@ -2,6 +2,11 @@
 
 Sistema distribuido de monitoreo de sensores IoT desarrollado para la asignatura **Internet: Arquitectura y Protocolos**.
 
+# Equipo de Trabajo
+- Emmanuel Felipe Cortes Rincon
+- Sara Hurtado Metaute
+- Samuel Moncada Mejia
+
 ## Descripción general
 
 El proyecto implementa una plataforma de monitoreo distribuido donde:
